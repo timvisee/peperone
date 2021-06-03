@@ -64,8 +64,8 @@ fn main() {
                 ),
         )
         .subcommand(
-            App::new("watch")
-                .about("Watch a timer")
+            App::new("tail")
+                .about("Tail a timer")
                 .arg(
                     Arg::new("NAME")
                         .about("Timer name")
@@ -92,8 +92,8 @@ fn main() {
         list(matcher, &mut timers);
     } else if let Some(matcher) = matches.subcommand_matches("show") {
         show(matcher, &mut timers);
-    } else if let Some(matcher) = matches.subcommand_matches("watch") {
-        watch(matcher, &mut timers);
+    } else if let Some(matcher) = matches.subcommand_matches("tail") {
+        tail(matcher, &mut timers);
     } else {
         unreachable!()
     }
@@ -217,8 +217,8 @@ fn show(matcher: &ArgMatches, timers: &mut Timers) {
     println!("{}", timer.format_elapsed());
 }
 
-/// Watch a timer.
-fn watch(matcher: &ArgMatches, timers: &mut Timers) {
+/// Tail a timer.
+fn tail(matcher: &ArgMatches, timers: &mut Timers) {
     let name = matcher.value_of("NAME").unwrap();
     let quiet = matcher.is_present("quiet");
 
