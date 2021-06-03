@@ -1,0 +1,8 @@
+[package]
+name = "peperone"
+version = "0.1.0"
+authors = ["timvisee <3a4fb3964f@sinenomine.email>"]
+edition = "2018"
+
+[dependencies]
+clap = "3.0.0-beta.2"
