@@ -3,8 +3,8 @@
 A stupidly simple command-line stopwatch.
 No blocking, no daemons, just some file.
 
-I wanted a simple stopwatch in [polybar] for easy project time tracking, and so
-I built this. The `peperone` name is a silly play on 'pomodoro', a well known
+I wanted a simple stopwatch in [polybar] for basic project time tracking, and so
+I built `peperone`. The 'peperone' name is a silly play on 'pomodoro', a well known
 timer and technique for project time tracking.
 
 ```bash
@@ -25,6 +25,14 @@ $ peperone remove mytimer
 ```
 
 See my polybar config [here][polybar-config].
+
+## FAQ
+
+#### Can I pause stopwatches/timers?
+No.
+
+#### Why Rust?
+I like Rust.
 
 ## License
 This project is released under the GNU GPL-3.0 license.
