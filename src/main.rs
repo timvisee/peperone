@@ -222,18 +222,28 @@ fn tail(matcher: &ArgMatches, timers: &mut Timers) {
     let name = matcher.value_of("NAME").unwrap();
     let quiet = matcher.is_present("quiet");
 
-    let timer = match timers.timers.get(name) {
-        Some(timer) => timer,
-        None => {
-            if !quiet {
-                eprintln!("error: no timer named '{}'", name);
-            }
-            process::exit(1);
+    // Ensure timer exists
+    if timers.timers.contains_key(name) {
+        if !quiet {
+            eprintln!("error: no timer named '{}'", name);
         }
-    };
+        process::exit(1);
+    }
 
     loop {
+        // Reload timer
+        let timers = Timers::load();
+        let timer = match timers.timers.get(name) {
+            Some(timer) => timer,
+            None => process::exit(0),
+        };
+
+        // Report time, sleep until next tick
         println!("{}", timer.format_elapsed());
-        std::thread::sleep_ms((1000 - timer.elapsed().num_milliseconds() % 1000) as u32);
+        std::thread::sleep(
+            Duration::milliseconds(1000 - timer.elapsed().num_milliseconds() % 1000)
+                .to_std()
+                .unwrap(),
+        );
     }
 }
