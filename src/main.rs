@@ -133,12 +133,6 @@ impl Timers {
     }
 }
 
-impl Drop for Timers {
-    fn drop(&mut self) {
-        self.save();
-    }
-}
-
 /// A timer.
 #[derive(Serialize, Deserialize, Debug)]
 struct Timer {
@@ -186,6 +180,7 @@ fn timers_path() -> PathBuf {
 fn new(matcher: &ArgMatches, timers: &mut Timers) {
     let name = matcher.value_of("NAME").unwrap();
     timers.timers.insert(name.into(), Timer::new());
+    timers.save();
 }
 
 /// Remove a timer.
@@ -195,6 +190,7 @@ fn remove(matcher: &ArgMatches, timers: &mut Timers) {
         eprintln!("error: no timer named '{}'", name);
         process::exit(1);
     }
+    timers.save();
 }
 
 /// List all timers.
