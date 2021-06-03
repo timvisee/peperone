@@ -63,6 +63,21 @@ fn main() {
                         .about("Quiet output"),
                 ),
         )
+        .subcommand(
+            App::new("watch")
+                .about("Watch a timer")
+                .arg(
+                    Arg::new("NAME")
+                        .about("Timer name")
+                        .default_value(NAME_DEFAULT),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .long("quiet")
+                        .short('q')
+                        .about("Quiet output"),
+                ),
+        )
         .get_matches();
 
     // Load timers
@@ -77,6 +92,8 @@ fn main() {
         list(matcher, &mut timers);
     } else if let Some(matcher) = matches.subcommand_matches("show") {
         show(matcher, &mut timers);
+    } else if let Some(matcher) = matches.subcommand_matches("watch") {
+        watch(matcher, &mut timers);
     } else {
         unreachable!()
     }
@@ -138,6 +155,23 @@ impl Timer {
     fn elapsed(&self) -> Duration {
         return Utc::now() - self.start;
     }
+
+    /// Format elapsed time.
+    fn format_elapsed(&self) -> String {
+        let elapsed = self.elapsed();
+
+        // Print to console
+        let mut format = format!(
+            "{}:{:02}",
+            elapsed.num_minutes() % 60,
+            elapsed.num_seconds() % 60
+        );
+        if elapsed.num_hours() > 0 {
+            format = format!("{}:{}", format, elapsed.num_hours());
+        }
+
+        format
+    }
 }
 
 /// Get path to timers file.
@@ -175,7 +209,6 @@ fn show(matcher: &ArgMatches, timers: &mut Timers) {
     let name = matcher.value_of("NAME").unwrap();
     let quiet = matcher.is_present("quiet");
 
-    // Get timer and elapsed time
     let timer = match timers.timers.get(name) {
         Some(timer) => timer,
         None => {
@@ -185,16 +218,26 @@ fn show(matcher: &ArgMatches, timers: &mut Timers) {
             process::exit(1);
         }
     };
-    let elapsed = timer.elapsed();
+    println!("{}", timer.format_elapsed());
+}
 
-    // Print to console
-    let mut format = format!(
-        "{:02}:{:02}",
-        elapsed.num_minutes() & 60,
-        elapsed.num_seconds() % 60
-    );
-    if elapsed.num_hours() > 0 {
-        format = format!("{}:{}", format, elapsed.num_hours());
+/// Watch a timer.
+fn watch(matcher: &ArgMatches, timers: &mut Timers) {
+    let name = matcher.value_of("NAME").unwrap();
+    let quiet = matcher.is_present("quiet");
+
+    let timer = match timers.timers.get(name) {
+        Some(timer) => timer,
+        None => {
+            if !quiet {
+                eprintln!("error: no timer named '{}'", name);
+            }
+            process::exit(1);
+        }
+    };
+
+    loop {
+        println!("{}", timer.format_elapsed());
+        std::thread::sleep_ms((1000 - timer.elapsed().num_milliseconds() % 1000) as u32);
     }
-    println!("{}", format);
 }
