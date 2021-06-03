@@ -2,9 +2,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process;
+use std::sync::mpsc::channel;
 
 use chrono::{prelude::*, Duration};
 use clap::{App, AppSettings, Arg, ArgMatches};
+use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 
 /// Default timer name.
@@ -222,21 +224,49 @@ fn tail(matcher: &ArgMatches, timers: &mut Timers) {
     let name = matcher.value_of("NAME").unwrap();
     let quiet = matcher.is_present("quiet");
 
-    // Ensure timer exists
-    if timers.timers.contains_key(name) {
-        if !quiet {
-            eprintln!("error: no timer named '{}'", name);
+    // Load timer
+    let mut timer = match timers.timers.get(name) {
+        Some(timer) => timer,
+        None => {
+            if !quiet {
+                eprintln!("error: no timer named '{}'", name);
+            }
+            process::exit(1);
         }
-        process::exit(1);
-    }
+    };
+
+    // Create timer file watcher
+    let (tx, rx) = channel();
+    let mut watcher = watcher(tx, Duration::seconds(1).to_std().unwrap()).unwrap();
+    watcher
+        .watch(timers_path(), RecursiveMode::NonRecursive)
+        .unwrap();
 
     loop {
-        // Reload timer
-        let timers = Timers::load();
-        let timer = match timers.timers.get(name) {
-            Some(timer) => timer,
-            None => process::exit(0),
-        };
+        // Process all file events, determine whether to recheck
+        let recheck = rx.try_iter().fold(false, |recheck, e| {
+            recheck
+                || match e {
+                    DebouncedEvent::NoticeWrite(_) => false,
+                    DebouncedEvent::NoticeRemove(_) => false,
+                    DebouncedEvent::Create(_) => true,
+                    DebouncedEvent::Write(_) => true,
+                    DebouncedEvent::Chmod(_) => false,
+                    DebouncedEvent::Remove(_) => true,
+                    DebouncedEvent::Rename(_, _) => true,
+                    DebouncedEvent::Rescan => true,
+                    DebouncedEvent::Error(_, _) => true,
+                }
+        });
+
+        // Recheck timer, make sure it's still active
+        if recheck {
+            *timers = Timers::load();
+            timer = match timers.timers.get(name) {
+                Some(timer) => timer,
+                None => process::exit(0),
+            };
+        }
 
         // Report time, sleep until next tick
         println!("{}", timer.format_elapsed());
