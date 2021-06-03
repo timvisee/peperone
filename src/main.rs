@@ -161,7 +161,7 @@ impl Timer {
             elapsed.num_seconds() % 60
         );
         if elapsed.num_hours() > 0 {
-            format = format!("{}:{}", format, elapsed.num_hours());
+            format = format!("{}:{}", elapsed.num_hours(), format);
         }
 
         format
