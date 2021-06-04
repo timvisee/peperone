@@ -99,6 +99,12 @@ fn main() {
                         .default_value(NAME_DEFAULT),
                 )
                 .arg(
+                    Arg::new("keep-going")
+                        .long("keep-going")
+                        .short('k')
+                        .about("Keep-going even when timer is non-existant"),
+                )
+                .arg(
                     Arg::new("quiet")
                         .long("quiet")
                         .short('q')
@@ -324,64 +330,69 @@ fn show(matcher: &ArgMatches, timers: &mut Timers) {
 /// Tail a timer.
 fn tail(matcher: &ArgMatches, timers: &mut Timers) {
     let name = matcher.value_of("NAME").unwrap();
+    let keep_going = matcher.is_present("keep-going");
     let quiet = matcher.is_present("quiet");
 
     // Load timer
-    let mut timer = match timers.timers.get(name) {
-        Some(timer) => timer,
-        None => {
-            if !quiet {
-                eprintln!("error: no timer named '{}'", name);
-            }
-            process::exit(1);
+    let mut timer = timers.timers.get(name);
+    if timer.is_none() && !keep_going {
+        if !quiet {
+            eprintln!("error: no timer named '{}'", name);
         }
-    };
+        process::exit(1);
+    }
 
     // Create timer file watcher
     let (tx, rx) = channel();
-    let mut watcher = watcher(tx, Duration::seconds(1).to_std().unwrap()).unwrap();
+    let mut watcher = watcher(tx, Duration::milliseconds(100).to_std().unwrap()).unwrap();
     watcher
         .watch(timers_path(), RecursiveMode::NonRecursive)
         .unwrap();
 
     loop {
-        // Process all file events, determine whether to recheck
-        let recheck = rx.try_iter().fold(false, |recheck, e| {
-            recheck
-                || match e {
-                    DebouncedEvent::NoticeWrite(_) => false,
-                    DebouncedEvent::NoticeRemove(_) => false,
-                    DebouncedEvent::Create(_) => true,
-                    DebouncedEvent::Write(_) => true,
-                    DebouncedEvent::Chmod(_) => false,
-                    DebouncedEvent::Remove(_) => true,
-                    DebouncedEvent::Rename(_, _) => true,
-                    DebouncedEvent::Rescan => true,
-                    DebouncedEvent::Error(_, _) => true,
-                }
-        });
-
-        // Recheck timer, make sure it's still active
-        if recheck {
-            *timers = Timers::load();
-            timer = match timers.timers.get(name) {
-                Some(timer) => timer,
-                None => process::exit(0),
-            };
-        }
-
         // Print time if running
-        if timer.running() {
-            println!("{}", timer.format_elapsed());
+        match timer {
+            Some(timer) if timer.running() => println!("{}", timer.format_elapsed()),
+            None => println!("0:00"),
+            _ => {}
         }
 
-        // Wait for next tick
-        if timer.running() {
-            std::thread::sleep(std::time::Duration::from_millis(
+        // Determine expected tick length
+        let delay = match timer {
+            Some(timer) if timer.running() => std::time::Duration::from_millis(
                 (1000 - timer.elapsed().num_milliseconds() % 1000) as u64,
-            ));
-        } else {
-            std::time::Duration::from_millis(100);
+            ),
+            _ => std::time::Duration::from_secs(9999999999),
+        };
+
+        // While waiting for next tick, process file events
+        while let Ok(event) = rx.recv_timeout(delay) {
+            let recheck = match event {
+                DebouncedEvent::NoticeWrite(_) => false,
+                DebouncedEvent::NoticeRemove(_) => false,
+                DebouncedEvent::Create(_) => true,
+                DebouncedEvent::Write(_) => true,
+                DebouncedEvent::Chmod(_) => false,
+                DebouncedEvent::Remove(_) => true,
+                DebouncedEvent::Rename(_, _) => true,
+                DebouncedEvent::Rescan => true,
+                DebouncedEvent::Error(_, _) => true,
+            };
+
+            // Recheck timer, make sure it's still active
+            if recheck {
+                // Drain remaining events
+                rx.try_iter().count();
+
+                *timers = Timers::load();
+                timer = timers.timers.get(name);
+                if timer.is_none() && !keep_going {
+                    process::exit(0);
+                }
+
+                // TODO: only continue if timer state changed
+                break;
+            }
         }
     }
 }

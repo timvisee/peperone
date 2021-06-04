@@ -36,4 +36,4 @@ This project is released under the GNU GPL-3.0 license.
 Check out the [LICENSE](LICENSE) file for more information.
 
 [polybar]: https://polybar.github.io/
-[polybar-config]: https://github.com/timvisee/dotfiles/blob/60ca6fff90e3ef77ac56b417706d3ad4d669ea1b/polybar/config#L478-L491
+[polybar-config]: https://github.com/timvisee/dotfiles/blob/88795797d7ab0f3af350108480b5e0e1caa737f5/polybar/config#L478-L486
