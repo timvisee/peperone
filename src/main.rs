@@ -24,9 +24,34 @@ fn main() {
             App::new("new")
                 .alias("n")
                 .alias("create")
-                .alias("start")
+                .about("Create and start timer")
+                .arg(
+                    Arg::new("NAME")
+                        .about("Timer name")
+                        .default_value(NAME_DEFAULT),
+                ),
+        )
+        .subcommand(
+            App::new("start")
                 .alias("s")
-                .about("Start new timer")
+                .about("Start existing timer")
+                .arg(
+                    Arg::new("NAME")
+                        .about("Timer name")
+                        .default_value(NAME_DEFAULT),
+                ),
+        )
+        .subcommand(
+            App::new("stop").alias("pause").about("Stop timer").arg(
+                Arg::new("NAME")
+                    .about("Timer name")
+                    .default_value(NAME_DEFAULT),
+            ),
+        )
+        .subcommand(
+            App::new("toggle")
+                .alias("startstop")
+                .about("Toggle timer (start/stop)")
                 .arg(
                     Arg::new("NAME")
                         .about("Timer name")
@@ -88,6 +113,12 @@ fn main() {
     // Handle specific command
     if let Some(matcher) = matches.subcommand_matches("new") {
         new(matcher, &mut timers);
+    } else if let Some(matcher) = matches.subcommand_matches("start") {
+        start(matcher, &mut timers);
+    } else if let Some(matcher) = matches.subcommand_matches("stop") {
+        stop(matcher, &mut timers);
+    } else if let Some(matcher) = matches.subcommand_matches("toggle") {
+        toggle(matcher, &mut timers);
     } else if let Some(matcher) = matches.subcommand_matches("remove") {
         remove(matcher, &mut timers);
     } else if let Some(matcher) = matches.subcommand_matches("list") {
@@ -136,31 +167,62 @@ impl Timers {
 }
 
 /// A timer.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Timer {
-    start: DateTime<Utc>,
+    /// If active, last time we started counting at.
+    #[serde(default)]
+    start: Option<DateTime<Utc>>,
+
+    /// Additional elapsed time.
+    #[serde(default)]
+    offset: std::time::Duration,
 }
 
 impl Timer {
     /// Create and start new timer.
-    fn new() -> Timer {
-        Timer { start: Utc::now() }
+    pub fn new() -> Timer {
+        let mut timer = Timer::default();
+        timer.start();
+        timer
     }
 
-    /// Get elapsed time.
-    fn elapsed(&self) -> Duration {
-        return Utc::now() - self.start;
+    /// Whether the timer is running.
+    pub fn running(&self) -> bool {
+        self.start.is_some()
+    }
+
+    /// (Re)start the timer.
+    pub fn start(&mut self) {
+        if let Some(start) = self.start.replace(Utc::now()) {
+            self.offset += (Utc::now() - start).to_std().unwrap();
+        }
+    }
+
+    /// Stop/pause the timer.
+    pub fn stop(&mut self) {
+        if let Some(start) = self.start.take() {
+            self.offset += (Utc::now() - start).to_std().unwrap();
+        }
+    }
+
+    /// Elapsed time.
+    pub fn elapsed(&self) -> Duration {
+        let mut elapsed = Duration::from_std(self.offset).unwrap();
+        if let Some(start) = self.start {
+            elapsed = elapsed + (Utc::now() - start);
+        }
+        elapsed
     }
 
     /// Format elapsed time.
-    fn format_elapsed(&self) -> String {
+    pub fn format_elapsed(&self) -> String {
         let elapsed = self.elapsed();
 
         // Print to console
         let mut format = format!(
             "{}:{:02}",
             elapsed.num_minutes() % 60,
-            elapsed.num_seconds() % 60
+            elapsed.num_seconds() % 60,
         );
         if elapsed.num_hours() > 0 {
             format = format!("{}:{}", elapsed.num_hours(), format);
@@ -178,10 +240,50 @@ fn timers_path() -> PathBuf {
         .into()
 }
 
-/// Start a new timer.
+/// Create and start new timer.
 fn new(matcher: &ArgMatches, timers: &mut Timers) {
     let name = matcher.value_of("NAME").unwrap();
     timers.timers.insert(name.into(), Timer::new());
+    timers.save();
+}
+
+/// Start existing timer.
+fn start(matcher: &ArgMatches, timers: &mut Timers) {
+    let name = matcher.value_of("NAME").unwrap();
+    match timers.timers.get_mut(name) {
+        Some(timer) => timer.start(),
+        None => {
+            eprintln!("error: no timer named '{}'", name);
+            process::exit(1);
+        }
+    }
+    timers.save();
+}
+
+/// Stop/pause existing timer.
+fn stop(matcher: &ArgMatches, timers: &mut Timers) {
+    let name = matcher.value_of("NAME").unwrap();
+    match timers.timers.get_mut(name) {
+        Some(timer) => timer.stop(),
+        None => {
+            eprintln!("error: no timer named '{}'", name);
+            process::exit(1);
+        }
+    }
+    timers.save();
+}
+
+/// Toggle existing timer.
+fn toggle(matcher: &ArgMatches, timers: &mut Timers) {
+    let name = matcher.value_of("NAME").unwrap();
+    match timers.timers.get_mut(name) {
+        Some(timer) if timer.running() => timer.stop(),
+        Some(timer) => timer.start(),
+        None => {
+            eprintln!("error: no timer named '{}'", name);
+            process::exit(1);
+        }
+    }
     timers.save();
 }
 
@@ -268,12 +370,18 @@ fn tail(matcher: &ArgMatches, timers: &mut Timers) {
             };
         }
 
-        // Report time, sleep until next tick
-        println!("{}", timer.format_elapsed());
-        std::thread::sleep(
-            Duration::milliseconds(1000 - timer.elapsed().num_milliseconds() % 1000)
-                .to_std()
-                .unwrap(),
-        );
+        // Print time if running
+        if timer.running() {
+            println!("{}", timer.format_elapsed());
+        }
+
+        // Wait for next tick
+        if timer.running() {
+            std::thread::sleep(std::time::Duration::from_millis(
+                (1000 - timer.elapsed().num_milliseconds() % 1000) as u64,
+            ));
+        } else {
+            std::time::Duration::from_millis(100);
+        }
     }
 }

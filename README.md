@@ -28,9 +28,6 @@ See my polybar config [here][polybar-config].
 
 ## FAQ
 
-#### Can I pause stopwatches/timers?
-No.
-
 #### Why Rust?
 I like Rust.
 
