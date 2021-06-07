@@ -224,17 +224,15 @@ impl Timer {
     pub fn format_elapsed(&self) -> String {
         let elapsed = self.elapsed();
 
-        // Print to console
-        let mut format = format!(
-            "{}:{:02}",
-            elapsed.num_minutes() % 60,
-            elapsed.num_seconds() % 60,
-        );
-        if elapsed.num_hours() > 0 {
-            format = format!("{}:{}", elapsed.num_hours(), format);
-        }
+        let min = elapsed.num_minutes() % 60;
+        let sec = elapsed.num_seconds() % 60;
 
-        format
+        // Print to console
+        if elapsed.num_hours() > 0 {
+            return format!("{}:{:02}:{:02}", elapsed.num_hours(), min, sec,);
+        } else {
+            return format!("{}:{:02}", min, sec,);
+        }
     }
 }
 
