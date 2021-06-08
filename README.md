@@ -21,6 +21,15 @@ mytimer
 $ peperone show mytimer
 00:21
 
+$ peperone tail mytimer
+00:21
+00:22
+00:23
+00:24
+00:25
+00:26
+# ...
+
 $ peperone remove mytimer
 ```
 
